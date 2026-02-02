@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  password    String
+  name        String?
+  role        String       @default("user")
+  files       File[]
+  permissions Permission[]
+  createdAt   DateTime     @default(now())
+}
+
+model File {
+  id          String         @id @default(cuid())
+  name        String
+  ownerId     String
+  owner       User           @relation(fields: [ownerId], references: [id])
+  versions    FileVersion[]
+  permissions Permission[]
+  createdAt   DateTime       @default(now())
+}
+
+model FileVersion {
+  id            String   @id @default(cuid())
+  fileId        String
+  file          File     @relation(fields: [fileId], references: [id])
+  versionNumber Int
+  filePath      String
+  createdAt     DateTime @default(now())
+}
+
+model Permission {
+  id     String @id @default(cuid())
+  fileId String
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  file   File   @relation(fields: [fileId], references: [id])
+  role   String // owner, editor, viewer
+}

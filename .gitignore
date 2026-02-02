@@ -1,0 +1,17 @@
+.env*
+node_modules/
+dist/
+build/
+.vscode/
+.DS_Store
+.idea/
+*.log
+coverage/
+*.tmp
+*.bak
+*.swp
+Thumbs.db
+*.iml
+out/
+*.class
+*.jar
