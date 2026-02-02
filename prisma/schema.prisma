@@ -18,6 +18,7 @@ model User {
   createdAt   DateTime     @default(now())
 }
 
+// Add indexes for better performance
 model File {
   id          String         @id @default(cuid())
   name        String
@@ -26,16 +27,23 @@ model File {
   versions    FileVersion[]
   permissions Permission[]
   createdAt   DateTime       @default(now())
+  @@index([ownerId])
+  @@index([createdAt])
 }
 
 model FileVersion {
-  id            String   @id @default(cuid())
-  fileId        String
-  file          File     @relation(fields: [fileId], references: [id])
+  id           String   @id @default(cuid())
+  fileId       String
+  file         File     @relation(fields: [fileId], references: [id])
   versionNumber Int
-  filePath      String
-  createdAt     DateTime @default(now())
+  filePath     String
+  size         BigInt?
+  mimeType     String?
+  createdAt    DateTime @default(now())
+  @@unique([fileId, versionNumber])
+  @@index([fileId])
 }
+
 
 model Permission {
   id     String @id @default(cuid())

@@ -1,0 +1,3 @@
+export const FILE_UPLOADED = 'FILE_UPLOADED';
+export const FILE_UPDATED = 'FILE_UPDATED';
+export const FILE_DELETED = 'FILE_DELETED';
