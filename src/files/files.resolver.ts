@@ -1,9 +1,10 @@
 import { Resolver, Query, Mutation, Args, Context } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
-import { GqlAuthGuard } from '../auth/gql-auth.guard';
-import { CurrentUser } from '../auth/current-user.decorator';
+import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { FilesService } from './files.service';
-import { File, CreateFileInput } from './dto/file.input';
+import { File } from './dto/file.input';
+import { CreateFileInput } from './dto/create-file.input';
 
 @Resolver(() => File)
 export class FilesResolver {

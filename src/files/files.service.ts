@@ -1,12 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MinioService } from '../minio/minio.service';
+import { PubSub } from 'graphql-subscriptions';
+import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
+import { v2 as cloudinary } from 'cloudinary'; // For mime-type validation
+import * as fileType from 'magic-bytes.js';
+import { KafkaService } from '../kafka/kafka.service';
+
+
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'application/pdf',
+  'text/plain', 'text/csv', 'text/markdown',
+  'application/json', 'application/xml'
+];
+
 
 @Injectable()
 export class FilesService {
   constructor(
     private prisma: PrismaService,
     private minio: MinioService,
+    private pubsub: PubSub,
+    private kafka: KafkaService,
   ) {}
 
   async getFiles(userId: string) {
@@ -64,6 +81,7 @@ export class FilesService {
   }
 
   async uploadFile(file: any, fileName: string, userId: string) {
+    this.validateFile(file);
     // Check if file with same name exists for this user
     const existingFile = await this.prisma.file.findFirst({
       where: { name: fileName, ownerId: userId },
@@ -83,12 +101,16 @@ export class FilesService {
       });
     }
 
+
     const filePath = `files/${userId}/${fileRecord.id}/v${versionNumber}-${Date.now()}-${fileName}`;
 
-    await this.minio.putObject('storage', filePath, file.createReadStream(), {
+    await this.minio.encryptAndUpload('storage', filePath, file.createReadStream(), {
       'Content-Type': file.mimetype,
       'Content-Length': file.size.toString(),
+      'x-amz-meta-original-name': fileName
     });
+
+
 
     const version = await this.prisma.fileVersion.create({
       data: {
@@ -100,6 +122,21 @@ export class FilesService {
       },
     });
 
+    await this.pubsub.publish(FILE_UPLOADED, {
+      fileUploaded: fileRecord
+    });
+
+    // 2. Kafka event (async processing, analytics, etc.)
+    const event: FileEvent = {
+      type: 'FILE_UPLOADED',
+      fileId: fileRecord.id,
+      userId,
+      timestamp: new Date().toISOString(),
+      metadata: { fileName, size: file.size }
+    };
+
+    await this.kafka.publishFileEvent(event);
+
     return this.getFile(fileRecord.id, userId);
   }
 
@@ -107,13 +144,27 @@ export class FilesService {
     const file = await this.getFile(fileId, userId);
 
     // Soft delete - mark as deleted or actually delete versions
-    await this.prisma.fileVersion.deleteMany({ where: { fileId } });
-    await this.prisma.file.delete({ where: { id: fileId } });
+    await this.kafka.publishFileEvent({
+      type: 'FILE_DELETED',
+      fileId,
+      userId,
+      timestamp: new Date().toISOString(),
+      metadata: { fileName: file.name }
+    });
 
     // Clean up MinIO objects (optional)
     const versions = await this.prisma.fileVersion.findMany({
       where: { fileId },
     });
+
+    // Perform deletion...
+    await this.prisma.$transaction(async (tx) => {
+      await tx.fileVersion.deleteMany({ where: { fileId } });
+      await tx.file.delete({ where: { id: fileId } });
+    });
+
+    await this.pubsub.publish(FILE_DELETED, { fileDeleted: fileId });
+
     for (const version of versions) {
       await this.minio.removeObject('storage', version.filePath);
     }
@@ -121,7 +172,6 @@ export class FilesService {
     return true;
   }
 
-  // Add to existing FilesService class
 
   async shareFile(
     fileId: string,
@@ -210,6 +260,10 @@ export class FilesService {
         data: { filePath: newPath },
       });
     }
+    
+    await this.pubsub.publish(FILE_UPDATED, {
+      fileUpdated: file
+    });
 
     return this.prisma.file.update({
       where: { id: fileId },
@@ -217,89 +271,25 @@ export class FilesService {
       include: { versions: true },
     });
   }
-}
 
-
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { MinioService } from '../minio/minio.service';
-import { PubSub } from 'graphql-subscriptions';
-import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
-
-@Injectable()
-export class FilesService {
-  constructor(
-    private prisma: PrismaService,
-    private minio: MinioService,
-    private pubsub: PubSub,
-  ) {}
-
-  // Update uploadFile method to publish events
-  async uploadFile(file: any, fileName: string, userId: string) {
-    const fileRecord = await this.handleFileUpload(file, fileName, userId);
-    
-    // Publish real-time event
-    await this.pubsub.publish(FILE_UPLOADED, { 
-      fileUploaded: fileRecord 
+  async getSecureDownloadStream(fileVersionId: string, userId: string) {
+    const version = await this.prisma.fileVersion.findFirst({
+      where: {
+        id: fileVersionId,
+        file: {
+          OR: [
+            { ownerId: userId },
+            { permissions: { some: { userId } } }
+          ]
+        }
+      }
     });
-    
-    return fileRecord;
+
+    if (!version) throw new NotFoundException('Access denied');
+
+    return this.minio.decryptDownload(version.filePath);
   }
-
-  async deleteFile(fileId: string, userId: string) {
-    const file = await this.getFile(fileId, userId);
-    
-    await this.prisma.$transaction(async (tx) => {
-      await tx.fileVersion.deleteMany({ where: { fileId } });
-      await tx.file.delete({ where: { id: fileId } });
-    });
-    
-    // Cleanup MinIO
-    const versions = await this.prisma.fileVersion.findMany({ where: { fileId } });
-    for (const version of versions) {
-      await this.minio.removeObject('storage', version.filePath);
-    }
-    
-    // Publish delete event
-    await this.pubsub.publish(FILE_DELETED, { fileDeleted: fileId });
-    
-    return true;
-  }
-
-  async renameFile(fileId: string, newName: string, userId: string) {
-    const updatedFile = await this.handleRename(fileId, newName, userId);
-    
-    // Publish update event
-    await this.pubsub.publish(FILE_UPDATED, { 
-      fileUpdated: updatedFile 
-    });
-    
-    return updatedFile;
-  }
-}
-
-
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { v2 as cloudinary } from 'cloudinary'; // For mime-type validation
-import * as fileType from 'magic-bytes.js';
-import { PubSub } from 'graphql-subscriptions';
-
-const ALLOWED_MIME_TYPES = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'video/mp4', 'video/webm', 'video/quicktime',
-  'application/pdf',
-  'text/plain', 'text/csv', 'text/markdown',
-  'application/json', 'application/xml'
-];
-
-@Injectable()
-export class FilesService {
-  constructor(
-    private prisma: PrismaService,
-    private minio: MinioService,
-    private pubsub: PubSub,
-  ) {}
-
+  
   private validateFile(file: any): void {
     // Size validation (10MB max)
     if (file.size > 10 * 1024 * 1024) {
@@ -318,106 +308,5 @@ export class FilesService {
     if (!detectedType?.some(t => ALLOWED_MIME_TYPES.includes(t.mime))) {
       throw new BadRequestException('Invalid file type detected.');
     }
-  }
-
-  async uploadFile(file: any, fileName: string, userId: string) {
-    this.validateFile(file);
-    
-    const fileRecord = await this.handleFileUpload(file, fileName, userId);
-    
-    // Encrypted upload
-    const filePath = `encrypted/${userId}/${fileRecord.id}/v1-${Date.now()}-${fileName}`;
-    await this.minio.encryptAndUpload('storage', filePath, file.createReadStream(), {
-      'Content-Type': file.mimetype,
-      'Content-Length': file.size.toString(),
-      'x-amz-meta-original-name': fileName
-    });
-
-    await this.prisma.fileVersion.create({
-      data: {
-        fileId: fileRecord.id,
-        filePath,
-        versionNumber: 1,
-        size: BigInt(file.size),
-        mimeType: file.mimetype
-      }
-    });
-
-    await this.pubsub.publish(FILE_UPLOADED, { fileUploaded: fileRecord });
-    return fileRecord;
-  }
-
-  async getSecureDownloadStream(fileVersionId: string, userId: string) {
-    const version = await this.prisma.fileVersion.findFirst({
-      where: {
-        id: fileVersionId,
-        file: {
-          OR: [
-            { ownerId: userId },
-            { permissions: { some: { userId } } }
-          ]
-        }
-      }
-    });
-
-    if (!version) throw new NotFoundException('Access denied');
-    
-    return this.minio.decryptDownload(version.filePath);
-  }
-}
-
-import { KafkaService } from '../kafka/kafka.service';
-
-@Injectable()
-export class FilesService {
-  constructor(
-    private prisma: PrismaService,
-    private minio: MinioService,
-    private pubsub: PubSub,
-    private kafka: KafkaService, // Add Kafka
-  ) {}
-
-  async uploadFile(file: any, fileName: string, userId: string) {
-    this.validateFile(file);
-    
-    const fileRecord = await this.handleFileUpload(file, fileName, userId);
-    
-    // 1. GraphQL PubSub (real-time)
-    await this.pubsub.publish(FILE_UPLOADED, { fileUploaded: fileRecord });
-    
-    // 2. Kafka event (async processing, analytics, etc.)
-    const event: FileEvent = {
-      type: 'FILE_UPLOADED',
-      fileId: fileRecord.id,
-      userId,
-      timestamp: new Date().toISOString(),
-      metadata: { fileName, size: file.size }
-    };
-    
-    await this.kafka.publishFileEvent(event);
-    
-    return fileRecord;
-  }
-
-  async deleteFile(fileId: string, userId: string) {
-    const file = await this.getFile(fileId, userId);
-    
-    // Publish Kafka event BEFORE deletion
-    await this.kafka.publishFileEvent({
-      type: 'FILE_DELETED',
-      fileId,
-      userId,
-      timestamp: new Date().toISOString(),
-      metadata: { fileName: file.name }
-    });
-    
-    // Perform deletion...
-    await this.prisma.$transaction(async (tx) => {
-      await tx.fileVersion.deleteMany({ where: { fileId } });
-      await tx.file.delete({ where: { id: fileId } });
-    });
-    
-    await this.pubsub.publish(FILE_DELETED, { fileDeleted: fileId });
-    return true;
   }
 }

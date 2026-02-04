@@ -10,6 +10,8 @@ import { PubSubModule } from './pubsub/pubsub.module';
 import { ThrottlerModule } from './throttler/throttler.module';
 import { KafkaModule } from './kafka/kafka.module';
 import { EventsModule } from './events/events.module';
+import { PrismaService } from './prisma/prisma.service';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -32,5 +34,6 @@ import { EventsModule } from './events/events.module';
     KafkaModule,
     EventsModule,
   ],
+  providers: [PrismaService],
 })
 export class AppModule {}

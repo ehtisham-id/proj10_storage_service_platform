@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { FilesService, FilesResolver, FilesService } from './';
+import {  FilesResolver } from './files.resolver';
+import { FilesService } from './files.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { MinioModule } from '../minio/minio.module';
 
