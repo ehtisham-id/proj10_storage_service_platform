@@ -514,10 +514,10 @@
       const handleShare = async () => {
         try {
           await fetchGraphQL({
-            query: `mutation ShareFile($fileId: String!, $userId: String!, $role: String!) {
-              shareFile(fileId: $fileId, userId: $userId, role: $role) { id userId role fileId }
+            query: `mutation ShareFile($fileId: String!, $userIdOrEmail: String!, $role: String!) {
+              shareFile(fileId: $fileId, userIdOrEmail: $userIdOrEmail, role: $role) { id userId role fileId }
             }`,
-            variables: { fileId: file.id, userId: shareUserId, role: shareRole },
+            variables: { fileId: file.id, userIdOrEmail: shareUserId, role: shareRole },
             token,
           });
           addToast('File shared', 'success');
@@ -582,7 +582,7 @@
 
             <div style=${{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
               <div style=${{ fontWeight: 600, marginBottom: 6 }}>Share</div>
-              <input className="input" placeholder="User ID" value=${shareUserId} onInput=${e => setShareUserId(e.target.value)} />
+              <input className="input" placeholder="Email or User ID" value=${shareUserId} onInput=${e => setShareUserId(e.target.value)} />
               <div style=${{ height: 8 }}></div>
               <select className="select" value=${shareRole} onChange=${e => setShareRole(e.target.value)}>
                 <option value="viewer">Viewer</option>

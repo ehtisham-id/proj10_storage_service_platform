@@ -64,11 +64,11 @@ export class FilesResolver {
   @UseGuards(GqlAuthGuard)
   async shareFile(
     @Args('fileId') fileId: string,
-    @Args('userId') userId: string,
+    @Args('userIdOrEmail') userIdOrEmail: string,
     @Args('role') role: 'owner' | 'editor' | 'viewer',
     @CurrentUser() user: any,
   ) {
-    return this.filesService.shareFile(fileId, user.sub, userId, role);
+    return this.filesService.shareFile(fileId, user.sub, userIdOrEmail, role);
   }
 
   @Mutation(() => File)

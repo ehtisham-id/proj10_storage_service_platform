@@ -208,22 +208,28 @@ export class FilesService {
   async shareFile(
     fileId: string,
     userId: string,
-    targetUserId: string,
+    targetUserIdOrEmail: string,
     role: 'owner' | 'editor' | 'viewer',
   ) {
     const file = await this.getFile(fileId, userId); // Validates ownership
 
-    // Validate target user exists
-    const targetUser = await this.prisma.user.findUnique({
-      where: { id: targetUserId },
+    // Validate target user exists - try by ID first, then by email
+    let targetUser = await this.prisma.user.findUnique({
+      where: { id: targetUserIdOrEmail },
     });
+    if (!targetUser) {
+      // Try by email
+      targetUser = await this.prisma.user.findUnique({
+        where: { email: targetUserIdOrEmail },
+      });
+    }
     if (!targetUser) {
       throw new NotFoundException('Target user not found');
     }
 
     // Check if permission already exists
     const existingPermission = await this.prisma.permission.findFirst({
-      where: { fileId, userId: targetUserId },
+      where: { fileId, userId: targetUser.id },
     });
 
     if (existingPermission) {
@@ -237,7 +243,7 @@ export class FilesService {
     return this.prisma.permission.create({
       data: {
         fileId,
-        userId: targetUserId,
+        userId: targetUser.id,
         role,
       },
       include: { user: true },

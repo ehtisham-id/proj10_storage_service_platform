@@ -41,6 +41,7 @@ services:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/storage"
       MINIO_ENDPOINT: "minio"
       MINIO_PORT: "9000"
+      MINIO_PUBLIC_ENDPOINT: "localhost"
       MINIO_ACCESS_KEY: "minioadmin"
       MINIO_SECRET_KEY: "minioadmin123"
       JWT_SECRET: "48acaa0f0242a3c4e6473a654fba886995abfbfb2963a7b7b018450102084c5e"
