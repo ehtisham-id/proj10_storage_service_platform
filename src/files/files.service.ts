@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MinioService } from '../minio/minio.service';
 import { PubSub } from 'graphql-subscriptions';
@@ -9,15 +13,21 @@ import { FileEvent, KafkaService } from '../kafka/kafka.service';
 import { FileUpload } from 'graphql-upload-minimal';
 import { Readable } from 'stream';
 
-
 const ALLOWED_MIME_TYPES = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'video/mp4', 'video/webm', 'video/quicktime',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
   'application/pdf',
-  'text/plain', 'text/csv', 'text/markdown',
-  'application/json', 'application/xml'
+  'text/plain',
+  'text/csv',
+  'text/markdown',
+  'application/json',
+  'application/xml',
 ];
-
 
 @Injectable()
 export class FilesService {
@@ -28,8 +38,28 @@ export class FilesService {
     private kafka: KafkaService,
   ) {}
 
+  // Convert BigInt size to number for GraphQL compatibility
+  private transformVersions<T extends { versions?: any[] }>(file: T): T {
+    if (file.versions) {
+      file.versions = file.versions.map((v) => ({
+        ...v,
+        size: v.size != null ? Number(v.size) : null,
+      }));
+    }
+    return file;
+  }
+
+  private transformVersion<T extends { size?: bigint | null }>(
+    version: T,
+  ): T & { size?: number | null } {
+    return {
+      ...version,
+      size: version.size != null ? Number(version.size) : null,
+    };
+  }
+
   async getFiles(userId: string) {
-    return this.prisma.file.findMany({
+    const files = await this.prisma.file.findMany({
       where: {
         OR: [{ ownerId: userId }, { permissions: { some: { userId } } }],
       },
@@ -43,6 +73,7 @@ export class FilesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return files.map((f) => this.transformVersions(f));
   }
 
   async getFile(id: string, userId: string) {
@@ -63,7 +94,7 @@ export class FilesService {
     });
 
     if (!file) throw new NotFoundException('File not found or access denied');
-    return file;
+    return this.transformVersions(file);
   }
 
   async getFileVersions(fileId: string, userId: string) {
@@ -76,10 +107,11 @@ export class FilesService {
 
     if (!file) throw new NotFoundException('File not found or access denied');
 
-    return this.prisma.fileVersion.findMany({
+    const versions = await this.prisma.fileVersion.findMany({
       where: { fileId },
       orderBy: { versionNumber: 'desc' },
     });
+    return versions.map((v) => this.transformVersion(v));
   }
 
   async uploadFile(file: FileUpload, fileName: string, userId: string) {
@@ -104,16 +136,13 @@ export class FilesService {
       });
     }
 
-
     const filePath = `files/${userId}/${fileRecord.id}/v${versionNumber}-${Date.now()}-${fileName}`;
 
     await this.minio.encryptAndUpload('storage', filePath, prepared.stream, {
       'Content-Type': prepared.mimetype,
       'Content-Length': prepared.size.toString(),
-      'x-amz-meta-original-name': fileName
+      'x-amz-meta-original-name': fileName,
     });
-
-
 
     const version = await this.prisma.fileVersion.create({
       data: {
@@ -126,7 +155,8 @@ export class FilesService {
     });
 
     await this.pubsub.publish(FILE_UPLOADED, {
-      fileUploaded: fileRecord
+      fileUploaded: fileRecord,
+      userId,
     });
 
     // 2. Kafka event (async processing, analytics, etc.)
@@ -135,7 +165,7 @@ export class FilesService {
       fileId: fileRecord.id,
       userId,
       timestamp: new Date().toISOString(),
-      metadata: { fileName, size: prepared.size }
+      metadata: { fileName, size: prepared.size },
     };
 
     await this.kafka.publishFileEvent(event);
@@ -152,7 +182,7 @@ export class FilesService {
       fileId,
       userId,
       timestamp: new Date().toISOString(),
-      metadata: { fileName: file.name }
+      metadata: { fileName: file.name },
     });
 
     // Clean up MinIO objects (optional)
@@ -166,7 +196,7 @@ export class FilesService {
       await tx.file.delete({ where: { id: fileId } });
     });
 
-    await this.pubsub.publish(FILE_DELETED, { fileDeleted: fileId });
+    await this.pubsub.publish(FILE_DELETED, { fileDeleted: fileId, userId });
 
     for (const version of versions) {
       await this.minio.removeObject('storage', version.filePath);
@@ -175,7 +205,6 @@ export class FilesService {
     return true;
   }
 
-
   async shareFile(
     fileId: string,
     userId: string,
@@ -183,6 +212,14 @@ export class FilesService {
     role: 'owner' | 'editor' | 'viewer',
   ) {
     const file = await this.getFile(fileId, userId); // Validates ownership
+
+    // Validate target user exists
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+    if (!targetUser) {
+      throw new NotFoundException('Target user not found');
+    }
 
     // Check if permission already exists
     const existingPermission = await this.prisma.permission.findFirst({
@@ -193,6 +230,7 @@ export class FilesService {
       return this.prisma.permission.update({
         where: { id: existingPermission.id },
         data: { role },
+        include: { user: true },
       });
     }
 
@@ -202,11 +240,12 @@ export class FilesService {
         userId: targetUserId,
         role,
       },
+      include: { user: true },
     });
   }
 
   async getSharedFiles(userId: string) {
-    return this.prisma.file.findMany({
+    const files = await this.prisma.file.findMany({
       where: {
         permissions: {
           some: { userId },
@@ -225,6 +264,7 @@ export class FilesService {
       },
       orderBy: { createdAt: 'desc' },
     });
+    return files.map((f) => this.transformVersions(f));
   }
 
   async getDownloadUrl(fileVersionId: string, userId: string) {
@@ -268,16 +308,18 @@ export class FilesService {
         data: { filePath: newPath },
       });
     }
-    
+
     await this.pubsub.publish(FILE_UPDATED, {
-      fileUpdated: file
+      fileUpdated: file,
+      userId,
     });
 
-    return this.prisma.file.update({
+    const updated = await this.prisma.file.update({
       where: { id: fileId },
       data: { name: newName },
       include: { versions: true },
     });
+    return this.transformVersions(updated);
   }
 
   async getSecureDownloadStream(fileVersionId: string, userId: string) {
@@ -285,19 +327,16 @@ export class FilesService {
       where: {
         id: fileVersionId,
         file: {
-          OR: [
-            { ownerId: userId },
-            { permissions: { some: { userId } } }
-          ]
-        }
-      }
+          OR: [{ ownerId: userId }, { permissions: { some: { userId } } }],
+        },
+      },
     });
 
     if (!version) throw new NotFoundException('Access denied');
 
     return this.minio.decryptDownload(version.filePath);
   }
-  
+
   private validateFile(file: {
     size: number;
     mimetype: string;

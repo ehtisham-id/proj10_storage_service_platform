@@ -20,7 +20,7 @@ export class MinioService extends Minio.Client implements OnModuleInit {
       accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
       secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
     });
-    
+
     // 32-byte key for AES-256 derived from secret
     this.encryptionKey = crypto
       .createHash('sha256')
@@ -29,16 +29,17 @@ export class MinioService extends Minio.Client implements OnModuleInit {
   }
 
   async onModuleInit() {
-    await this.bucketExists('storage').catch(() => 
-      this.makeBucket('storage', 'US_EAST_1')
-    );
+    const exists = await this.bucketExists('storage');
+    if (!exists) {
+      await this.makeBucket('storage', 'us-east-1');
+    }
   }
 
   async encryptAndUpload(
-    bucket: string, 
-    objectName: string, 
-    stream: Readable, 
-    metadata?: any
+    bucket: string,
+    objectName: string,
+    stream: Readable,
+    metadata?: any,
   ) {
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-ctr', this.encryptionKey, iv);
@@ -53,7 +54,11 @@ export class MinioService extends Minio.Client implements OnModuleInit {
   async decryptDownload(objectName: string): Promise<Readable> {
     const encryptedStream = await this.getObject('storage', objectName);
     const iv = await MinioService.readIv(encryptedStream);
-    const decipher = crypto.createDecipheriv('aes-256-ctr', this.encryptionKey, iv);
+    const decipher = crypto.createDecipheriv(
+      'aes-256-ctr',
+      this.encryptionKey,
+      iv,
+    );
 
     return encryptedStream.pipe(decipher);
   }

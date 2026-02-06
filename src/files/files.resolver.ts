@@ -39,7 +39,8 @@ export class FilesResolver {
   @Mutation(() => File)
   @UseGuards(GqlAuthGuard)
   async uploadFile(
-    @Args({ name: 'file', type: () => GraphQLUpload }) file: Promise<FileUpload>,
+    @Args({ name: 'file', type: () => GraphQLUpload })
+    file: Promise<FileUpload>,
     @Args('fileName') fileName: string,
     @CurrentUser() user: any,
   ) {
@@ -89,19 +90,28 @@ export class FilesResolver {
     return this.filesService.getDownloadUrl(fileVersionId, user.sub);
   }
 
-  @Subscription(() => File)
+  @Subscription(() => File, {
+    filter: (payload, variables, context) =>
+      payload.userId === context.req.user.sub,
+  })
   @UseGuards(GqlAuthGuard)
   fileUploaded() {
     return this.pubsub.asyncIterator(FILE_UPLOADED);
   }
 
-  @Subscription(() => File)
+  @Subscription(() => File, {
+    filter: (payload, variables, context) =>
+      payload.userId === context.req.user.sub,
+  })
   @UseGuards(GqlAuthGuard)
   fileUpdated() {
     return this.pubsub.asyncIterator(FILE_UPDATED);
   }
 
-  @Subscription(() => String)
+  @Subscription(() => String, {
+    filter: (payload, variables, context) =>
+      payload.userId === context.req.user.sub,
+  })
   @UseGuards(GqlAuthGuard)
   fileDeleted() {
     return this.pubsub.asyncIterator(FILE_DELETED);

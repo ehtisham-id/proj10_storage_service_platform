@@ -15,7 +15,7 @@ export class FileVersion {
   @Field()
   filePath!: string;
 
-  @Field({ nullable: true })
+  @Field(() => Int, { nullable: true })
   size?: number;
 
   @Field({ nullable: true })
