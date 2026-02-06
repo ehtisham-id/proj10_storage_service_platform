@@ -50,9 +50,20 @@ async function bootstrap() {
 
   app.use(graphqlUploadExpress({ maxFileSize: 10 * 1024 * 1024, maxFiles: 1 }));
 
+  // Echo the request origin and allow credentials so preflight responses include CORS headers
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:5500'],
+    origin: true,
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'apollo-require-preflight',
+      'x-apollo-operation-name',
+      'x-requested-with',
+    ],
+    exposedHeaders: ['x-apollo-operation-name'],
   });
 
   await waitForKafka();

@@ -29,6 +29,15 @@ import { EventsModule } from './events/events.module';
             'http://localhost:5500',
           ],
           credentials: true,
+          methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+          allowedHeaders: [
+            'Content-Type',
+            'Authorization',
+            'Accept',
+            'apollo-require-preflight',
+            'x-apollo-operation-name',
+            'x-requested-with',
+          ],
         },
         uploads: false,
         subscriptions: {

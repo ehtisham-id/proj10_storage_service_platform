@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -28,7 +29,10 @@
       --warn: #f59e0b;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       font-family: "SF Pro Text", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -52,7 +56,11 @@
       background: var(--bg);
     }
 
-    .brand { font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }
+    .brand {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
 
     .layout {
       display: flex;
@@ -84,16 +92,29 @@
       cursor: pointer;
       font-size: 14px;
     }
-    .btn:hover { background: #f3f4f6; }
+
+    .btn:hover {
+      background: #f3f4f6;
+    }
+
     .btn-primary {
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
     }
-    .btn-primary:hover { background: #1f1f1f; }
-    .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 
-    .input, .select {
+    .btn-primary:hover {
+      background: #1f1f1f;
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: #fff;
+      border-color: var(--danger);
+    }
+
+    .input,
+    .select {
       width: 100%;
       padding: 10px 12px;
       border-radius: 8px;
@@ -122,7 +143,10 @@
       cursor: pointer;
       transition: box-shadow .2s ease;
     }
-    .file-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+
+    .file-card:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
 
     .file-row {
       display: flex;
@@ -134,7 +158,10 @@
       cursor: pointer;
     }
 
-    .muted { color: var(--muted); font-size: 12px; }
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
 
     .toast {
       position: fixed;
@@ -152,13 +179,13 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
     }
 
     .modal {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0, 0, 0, 0.5);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -173,7 +200,7 @@
       width: 380px;
       background: #fff;
       border-left: 1px solid var(--border);
-      box-shadow: -8px 0 24px rgba(0,0,0,0.1);
+      box-shadow: -8px 0 24px rgba(0, 0, 0, 0.1);
       overflow: auto;
     }
 
@@ -183,14 +210,24 @@
       margin: 0 0 12px 0;
     }
 
-    .row { display: flex; gap: 8px; align-items: center; }
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
 
     @media (max-width: 900px) {
-      .sidebar { display: none; }
-      .drawer { width: 100%; }
+      .sidebar {
+        display: none;
+      }
+
+      .drawer {
+        width: 100%;
+      }
     }
   </style>
 </head>
+
 <body>
   <div id="root"></div>
 
@@ -235,8 +272,8 @@
 
       return client.subscribe({ query, variables }, {
         next: onNext,
-        error: () => {},
-        complete: () => {},
+        error: () => { },
+        complete: () => { },
       });
     };
 
@@ -389,9 +426,17 @@
           formData.append('0', file);
 
           const token = localStorage.getItem('accessToken');
+          const headers = {
+            // Apollo CSRF prevention: request a preflight for multipart uploads
+            'apollo-require-preflight': '1',
+            'x-apollo-operation-name': 'UploadFile',
+            Accept: 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          };
+
           const response = await fetch(HTTP_URL, {
             method: 'POST',
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers,
             body: formData,
           });
 
@@ -747,4 +792,5 @@
     root.render(html`<${Root} />`);
   </script>
 </body>
+
 </html>

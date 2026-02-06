@@ -332,3 +332,5 @@ http://localhost:3001  # Storage Platform Dashboard
 **Portfolio Complete! 🎉 Deploy and share your live demo!**
 
 **Need deployment help or custom features? Just ask!** 🚀
+
+docker compose exec backend sh -c "npx prisma generate && npx prisma migrate dev --name init --skip-seed" Run this after running container
