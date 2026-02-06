@@ -4,16 +4,16 @@ import { User } from '../../user/user.model';
 @ObjectType()
 export class FileVersion {
   @Field(() => ID)
-  id: string;
+  id!: string;
 
   @Field(() => ID)
-  fileId: string;
+  fileId!: string;
 
   @Field(() => Int)
-  versionNumber: number;
+  versionNumber!: number;
 
   @Field()
-  filePath: string;
+  filePath!: string;
 
   @Field({ nullable: true })
   size?: number;
@@ -22,46 +22,46 @@ export class FileVersion {
   mimeType?: string;
 
   @Field()
-  createdAt: Date;
+  createdAt!: Date;
 }
 
 @ObjectType()
 export class Permission {
   @Field(() => ID)
-  id: string;
+  id!: string;
 
   @Field(() => ID)
-  userId: string;
+  userId!: string;
 
   @Field(() => User)
-  user: User;
+  user!: User;
 
   @Field(() => ID)
-  fileId: string;
+  fileId!: string;
 
   @Field()
-  role: string;
+  role!: string;
 }
 
 @ObjectType()
 export class File {
   @Field(() => ID)
-  id: string;
+  id!: string;
 
   @Field()
-  name: string;
+  name!: string;
 
   @Field(() => User)
-  owner: User;
+  owner!: User;
 
   @Field(() => [FileVersion])
-  versions: FileVersion[];
+  versions!: FileVersion[];
 
   @Field(() => [Permission])
-  permissions: Permission[];
+  permissions!: Permission[];
 
   @Field()
-  createdAt: Date;
+  createdAt!: Date;
 
   @Field(() => String)
   get latestDownloadUrl(): string {
@@ -72,11 +72,11 @@ export class File {
 @InputType()
 export class ShareFileInput {
   @Field()
-  fileId: string;
+  fileId!: string;
 
   @Field()
-  userId: string;
+  userId!: string;
 
   @Field()
-  role: 'owner' | 'editor' | 'viewer';
+  role!: 'owner' | 'editor' | 'viewer';
 }

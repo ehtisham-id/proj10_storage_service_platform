@@ -4,11 +4,11 @@ import { File } from './file.input';
 @ObjectType()
 export class FileSubscriptionPayload {
   @Field(() => File)
-  fileUploaded: File;
+  fileUploaded!: File;
 
   @Field(() => File)
-  fileUpdated: File;
+  fileUpdated!: File;
 
   @Field(() => ID)
-  fileDeleted: string;
+  fileDeleted!: string;
 }

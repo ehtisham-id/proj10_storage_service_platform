@@ -3,7 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MinioService } from '../minio/minio.service';
 import { PubSub } from 'graphql-subscriptions';
 import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
-import { fileType } from 'magic-bytes.js';
+import fileType from 'magic-bytes.js';
+import * as Minio from 'minio';
 import { FileEvent, KafkaService } from '../kafka/kafka.service';
 import { FileUpload } from 'graphql-upload';
 import { Readable } from 'stream';
@@ -258,6 +259,7 @@ export class FilesService {
         'storage',
         newPath,
         `/storage/${oldPath}`,
+        new Minio.CopyConditions(),
       );
       await this.minio.removeObject('storage', oldPath);
 
@@ -313,7 +315,7 @@ export class FilesService {
 
     const detectedType = fileType(file.buffer) || [];
     const isDetectedAllowed = detectedType.some((t) =>
-      ALLOWED_MIME_TYPES.includes(t.mime),
+      t.mime ? ALLOWED_MIME_TYPES.includes(t.mime) : false,
     );
     const isTextLike =
       file.mimetype.startsWith('text/') ||

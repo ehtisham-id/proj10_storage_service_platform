@@ -3,13 +3,10 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
-    ThrottlerModule.forRootAsync({
-      useFactory: () => ({
-        ttl: 60,
-        limit: 10, // 10 req/min per IP
-      }),
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60, limit: 10 }],
     }),
   ],
   exports: [ThrottlerModule],
 })
-export class ThrottlerModule {}
+export class AppThrottlerModule {}

@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drive Clone</title>
+
+  <!-- React + ReactDOM (UMD) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- HTM (JSX alternative, no build step) -->
+  <script src="https://unpkg.com/htm@3.1.1/dist/htm.umd.js"></script>
+
+  <!-- GraphQL WS (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/graphql-ws@5.14.2/umd/graphql-ws.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #0b0b0b;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --panel: #f9fafb;
+      --accent: #111111;
+      --danger: #dc2626;
+      --ok: #16a34a;
+      --warn: #f59e0b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "SF Pro Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: var(--fg);
+      background: var(--bg);
+    }
+
+    .app {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      height: 64px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--bg);
+    }
+
+    .brand { font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }
+
+    .layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 240px;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .content {
+      flex: 1;
+      overflow: auto;
+      padding: 24px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .btn:hover { background: #f3f4f6; }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: #1f1f1f; }
+    .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+    .input, .select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      background: #fff;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      background: #fff;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .file-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      cursor: pointer;
+      transition: box-shadow .2s ease;
+    }
+    .file-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+    }
+
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .toast {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 9999;
+      max-width: 420px;
+    }
+
+    .toast-item {
+      padding: 12px 14px;
+      border-radius: 10px;
+      color: #fff;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 380px;
+      background: #fff;
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 24px rgba(0,0,0,0.1);
+      overflow: auto;
+    }
+
+    .section-title {
+      font-weight: 700;
+      font-size: 20px;
+      margin: 0 0 12px 0;
+    }
+
+    .row { display: flex; gap: 8px; align-items: center; }
+
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .drawer { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const { useState, useEffect, useRef, createContext, useContext } = React;
+    const html = htm.bind(React.createElement);
+
+    // ========================================
+    // CONFIGURATION - EDIT THESE URLs
+    // ========================================
+    const HTTP_URL = 'http://localhost:3000/graphql';
+    const WS_URL = 'ws://localhost:3000/graphql';
+    const REST_URL = 'http://localhost:3000';
+    // ========================================
+
+    const AuthContext = createContext();
+    const ToastContext = createContext();
+
+    const useAuth = () => useContext(AuthContext);
+    const useToast = () => useContext(ToastContext);
+
+    const fetchGraphQL = async ({ query, variables, token }) => {
+      const res = await fetch(HTTP_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        credentials: 'include',
+        body: JSON.stringify({ query, variables })
+      });
+      const data = await res.json();
+      if (data.errors && data.errors.length) throw new Error(data.errors[0].message);
+      return data.data;
+    };
+
+    const subscribeWS = ({ query, variables, token, onNext }) => {
+      const client = window.graphqlWs.createClient({
+        url: WS_URL,
+        connectionParams: token ? { authToken: token } : {},
+      });
+
+      return client.subscribe({ query, variables }, {
+        next: onNext,
+        error: () => {},
+        complete: () => {},
+      });
+    };
+
+    const Toast = ({ message, type = 'info', onClose }) => {
+      useEffect(() => {
+        const t = setTimeout(onClose, 4000);
+        return () => clearTimeout(t);
+      }, [onClose]);
+
+      const colors = {
+        info: '#2563eb',
+        success: '#16a34a',
+        error: '#dc2626',
+        warning: '#f59e0b',
+      };
+
+      return html`
+        <div className="toast-item" style=${{ background: colors[type] }}>
+          <span>${message}</span>
+          <button className="btn" onClick=${onClose} style=${{ color: '#fff', border: 'none', background: 'transparent' }}>×</button>
+        </div>
+      `;
+    };
+
+    const ToastProvider = ({ children }) => {
+      const [toasts, setToasts] = useState([]);
+      const addToast = (message, type = 'info') => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, message, type }]);
+      };
+      const removeToast = (id) => setToasts(prev => prev.filter(t => t.id !== id));
+
+      return html`
+        <${ToastContext.Provider} value=${{ addToast }}>
+          ${children}
+          <div className="toast">
+            ${toasts.map(t => html`<${Toast} key=${t.id} ...${t} onClose=${() => removeToast(t.id)} />`)}
+          </div>
+        <//>
+      `;
+    };
+
+    const AuthProvider = ({ children }) => {
+      const [token, setToken] = useState(localStorage.getItem('accessToken'));
+      const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || 'null'));
+
+      const login = (accessToken, userData) => {
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+        setToken(accessToken);
+        setUser(userData);
+      };
+
+      const logout = () => {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('user');
+        setToken(null);
+        setUser(null);
+      };
+
+      return html`
+        <${AuthContext.Provider} value=${{ token, user, login, logout }}>
+          ${children}
+        <//>
+      `;
+    };
+
+    const AuthScreen = () => {
+      const [isLogin, setIsLogin] = useState(true);
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [name, setName] = useState('');
+      const { login } = useAuth();
+      const { addToast } = useToast();
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+          const query = isLogin
+            ? `mutation Login($email: String!, $password: String!) {
+                login(email: $email, password: $password) {
+                  accessToken refreshToken
+                  user { id email name role createdAt }
+                }
+              }`
+            : `mutation Register($email: String!, $password: String!, $name: String!) {
+                register(email: $email, password: $password, name: $name) {
+                  accessToken refreshToken
+                  user { id email name role createdAt }
+                }
+              }`;
+
+          const variables = isLogin ? { email, password } : { email, password, name };
+          const data = await fetchGraphQL({ query, variables });
+          const result = data.login || data.register;
+          login(result.accessToken, result.user);
+          addToast('Authenticated successfully', 'success');
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      return html`
+        <div style=${{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
+          <div className="card" style=${{ width: '100%', maxWidth: 420 }}>
+            <h2 className="section-title">${isLogin ? 'Login' : 'Register'}</h2>
+            <form onSubmit=${handleSubmit} style=${{ display: 'grid', gap: 10 }}>
+              ${!isLogin && html`
+                <input className="input" type="text" placeholder="Name" value=${name} onInput=${e => setName(e.target.value)} required />
+              `}
+              <input className="input" type="email" placeholder="Email" value=${email} onInput=${e => setEmail(e.target.value)} required />
+              <input className="input" type="password" placeholder="Password" value=${password} onInput=${e => setPassword(e.target.value)} required />
+              <button className="btn btn-primary" type="submit">${isLogin ? 'Login' : 'Register'}</button>
+            </form>
+            <button className="btn" style=${{ marginTop: 10, width: '100%' }} onClick=${() => setIsLogin(!isLogin)}>
+              ${isLogin ? 'Need an account? Register' : 'Have an account? Login'}
+            </button>
+          </div>
+        </div>
+      `;
+    };
+
+    const FileUploadModal = ({ onClose, onComplete }) => {
+      const [file, setFile] = useState(null);
+      const [fileName, setFileName] = useState('');
+      const { addToast } = useToast();
+      const fileInputRef = useRef();
+
+      const handleUpload = async () => {
+        if (!file || !fileName) {
+          addToast('Select file and enter name', 'warning');
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          addToast('File must be under 10MB', 'error');
+          return;
+        }
+
+        try {
+          const formData = new FormData();
+          const operations = JSON.stringify({
+            query: `mutation UploadFile($file: Upload!, $fileName: String!) {
+              uploadFile(file: $file, fileName: $fileName) { id name createdAt }
+            }`,
+            variables: { file: null, fileName }
+          });
+          const map = JSON.stringify({ '0': ['variables.file'] });
+          formData.append('operations', operations);
+          formData.append('map', map);
+          formData.append('0', file);
+
+          const token = localStorage.getItem('accessToken');
+          const response = await fetch(HTTP_URL, {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: formData,
+          });
+
+          const result = await response.json();
+          if (result.errors) throw new Error(result.errors[0].message);
+
+          addToast('File uploaded', 'success');
+          setFile(null);
+          setFileName('');
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          onComplete();
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      return html`
+        <div className="modal">
+          <div className="card" style=${{ width: '100%', maxWidth: 460 }}>
+            <h3 className="section-title">Upload File</h3>
+            <input ref=${fileInputRef} className="input" type="file" onChange=${e => setFile(e.target.files[0])} />
+            <div style=${{ height: 10 }}></div>
+            <input className="input" type="text" placeholder="File name" value=${fileName} onInput=${e => setFileName(e.target.value)} />
+            <div style=${{ height: 12 }}></div>
+            <div className="row">
+              <button className="btn btn-primary" style=${{ flex: 1 }} onClick=${handleUpload}>Upload</button>
+              <button className="btn" style=${{ flex: 1 }} onClick=${onClose}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    const FileDetailsPanel = ({ file, onClose, refetch }) => {
+      const [renaming, setRenaming] = useState(false);
+      const [newName, setNewName] = useState(file.name);
+      const [shareUserId, setShareUserId] = useState('');
+      const [shareRole, setShareRole] = useState('viewer');
+      const { addToast } = useToast();
+      const { token } = useAuth();
+
+      const handleRename = async () => {
+        try {
+          await fetchGraphQL({
+            query: `mutation RenameFile($fileId: String!, $newName: String!) {
+              renameFile(fileId: $fileId, newName: $newName) { id name createdAt }
+            }`,
+            variables: { fileId: file.id, newName },
+            token,
+          });
+          addToast('File renamed', 'success');
+          setRenaming(false);
+          refetch();
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      const handleDelete = async () => {
+        if (!confirm('Delete this file?')) return;
+        try {
+          await fetchGraphQL({
+            query: `mutation DeleteFile($fileId: String!) { deleteFile(fileId: $fileId) }`,
+            variables: { fileId: file.id },
+            token,
+          });
+          addToast('File deleted', 'success');
+          onClose();
+          refetch();
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      const handleShare = async () => {
+        try {
+          await fetchGraphQL({
+            query: `mutation ShareFile($fileId: String!, $userId: String!, $role: String!) {
+              shareFile(fileId: $fileId, userId: $userId, role: $role) { id userId role fileId }
+            }`,
+            variables: { fileId: file.id, userId: shareUserId, role: shareRole },
+            token,
+          });
+          addToast('File shared', 'success');
+          setShareUserId('');
+          refetch();
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      const handleDownload = async (versionId) => {
+        try {
+          const data = await fetchGraphQL({
+            query: `query GetDownloadUrl($fileVersionId: String!) { getDownloadUrl(fileVersionId: $fileVersionId) }`,
+            variables: { fileVersionId: versionId },
+            token,
+          });
+          window.open(data.getDownloadUrl, '_blank');
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      const latestVersion = file.versions && file.versions[0];
+
+      return html`
+        <div className="drawer">
+          <div style=${{ padding: 16, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style=${{ fontWeight: 700 }}>File Details</div>
+            <button className="btn" onClick=${onClose}>×</button>
+          </div>
+
+          <div style=${{ padding: 16, display: 'grid', gap: 16 }}>
+            ${renaming ? html`
+              <div style=${{ display: 'grid', gap: 8 }}>
+                <input className="input" value=${newName} onInput=${e => setNewName(e.target.value)} />
+                <div className="row">
+                  <button className="btn btn-primary" style=${{ flex: 1 }} onClick=${handleRename}>Save</button>
+                  <button className="btn" style=${{ flex: 1 }} onClick=${() => setRenaming(false)}>Cancel</button>
+                </div>
+              </div>
+            ` : html`
+              <div>
+                <div style=${{ fontSize: 18, fontWeight: 700 }}>${file.name}</div>
+                <div className="muted">Owner: ${file.owner?.email}</div>
+              </div>
+            `}
+
+            <div style=${{ display: 'grid', gap: 8 }}>
+              <button className="btn" onClick=${() => setRenaming(true)}>Rename</button>
+              <button className="btn btn-danger" onClick=${handleDelete}>Delete</button>
+            </div>
+
+            ${latestVersion && html`
+              <div style=${{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <div style=${{ fontWeight: 600, marginBottom: 6 }}>Latest Version</div>
+                <div className="muted">Size: ${((latestVersion.size || 0) / 1024).toFixed(2)} KB</div>
+                <div className="muted">Type: ${latestVersion.mimeType || 'unknown'}</div>
+                <button className="btn btn-primary" style=${{ marginTop: 8, width: '100%' }} onClick=${() => handleDownload(latestVersion.id)}>Download</button>
+              </div>
+            `}
+
+            <div style=${{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <div style=${{ fontWeight: 600, marginBottom: 6 }}>Share</div>
+              <input className="input" placeholder="User ID" value=${shareUserId} onInput=${e => setShareUserId(e.target.value)} />
+              <div style=${{ height: 8 }}></div>
+              <select className="select" value=${shareRole} onChange=${e => setShareRole(e.target.value)}>
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+                <option value="owner">Owner</option>
+              </select>
+              <div style=${{ height: 8 }}></div>
+              <button className="btn btn-primary" onClick=${handleShare}>Share</button>
+            </div>
+
+            ${file.permissions && file.permissions.length > 0 && html`
+              <div style=${{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                <div style=${{ fontWeight: 600, marginBottom: 6 }}>Permissions</div>
+                ${file.permissions.map(p => html`
+                  <div className="muted" key=${p.id}>${p.user?.email} - ${p.role}</div>
+                `)}
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+    };
+
+    const Dashboard = () => {
+      const [view, setView] = useState('my-files');
+      const [viewMode, setViewMode] = useState('grid');
+      const [selectedFile, setSelectedFile] = useState(null);
+      const [uploadOpen, setUploadOpen] = useState(false);
+      const [restResponse, setRestResponse] = useState('');
+      const [files, setFiles] = useState([]);
+      const { user, logout, token } = useAuth();
+      const { addToast } = useToast();
+
+      const loadFiles = async () => {
+        try {
+          const data = await fetchGraphQL({
+            query: `query GetFiles {
+              getFiles {
+                id name createdAt
+                owner { id email name role createdAt }
+                versions { id fileId versionNumber filePath size mimeType createdAt }
+                permissions { id userId role fileId user { id email name role createdAt } }
+              }
+            }`,
+            token,
+          });
+          setFiles(data.getFiles || []);
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      const loadShared = async () => {
+        try {
+          const data = await fetchGraphQL({
+            query: `query GetSharedFiles {
+              getSharedFiles {
+                id name createdAt
+                owner { id email name role createdAt }
+                versions { id fileId versionNumber filePath size mimeType createdAt }
+                permissions { id userId role fileId user { id email name role createdAt } }
+              }
+            }`,
+            token,
+          });
+          setFiles(data.getSharedFiles || []);
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      useEffect(() => {
+        if (view === 'my-files') loadFiles();
+        if (view === 'shared') loadShared();
+      }, [view]);
+
+      useEffect(() => {
+        const unsubUploaded = subscribeWS({
+          query: `subscription OnFileUploaded { fileUploaded { id name createdAt } }`,
+          token,
+          onNext: (msg) => {
+            if (msg?.data?.fileUploaded?.name) addToast(`File uploaded: ${msg.data.fileUploaded.name}`, 'info');
+            if (view === 'my-files') loadFiles();
+          }
+        });
+
+        const unsubUpdated = subscribeWS({
+          query: `subscription OnFileUpdated { fileUpdated { id name createdAt } }`,
+          token,
+          onNext: (msg) => {
+            if (msg?.data?.fileUpdated?.name) addToast(`File updated: ${msg.data.fileUpdated.name}`, 'info');
+            if (view === 'my-files') loadFiles();
+          }
+        });
+
+        const unsubDeleted = subscribeWS({
+          query: `subscription OnFileDeleted { fileDeleted }`,
+          token,
+          onNext: () => {
+            addToast('File deleted', 'info');
+            if (view === 'my-files') loadFiles();
+          }
+        });
+
+        return () => {
+          if (typeof unsubUploaded === 'function') unsubUploaded();
+          if (typeof unsubUpdated === 'function') unsubUpdated();
+          if (typeof unsubDeleted === 'function') unsubDeleted();
+        };
+      }, [token, view]);
+
+      const testRestEndpoint = async () => {
+        try {
+          const res = await fetch(REST_URL);
+          const text = await res.text();
+          setRestResponse(text);
+          addToast('REST endpoint tested', 'success');
+        } catch (err) {
+          addToast(err.message, 'error');
+        }
+      };
+
+      return html`
+        <div className="app">
+          <div className="topbar">
+            <div className="brand">Drive Clone</div>
+            <div className="row">
+              <button className="btn" onClick=${testRestEndpoint}>Test REST</button>
+              <button className="btn btn-primary" onClick=${() => setUploadOpen(true)}>Upload</button>
+              <div style=${{ fontSize: 13 }}>
+                <span style=${{ fontWeight: 600 }}>${user?.name || 'User'}</span>
+                <button className="btn" onClick=${logout} style=${{ marginLeft: 6 }}>Logout</button>
+              </div>
+            </div>
+          </div>
+
+          <div className="layout">
+            <div className="sidebar">
+              <div style=${{ display: 'grid', gap: 8 }}>
+                <button className=${`btn ${view === 'my-files' ? 'btn-primary' : ''}`} onClick=${() => setView('my-files')}>My Files</button>
+                <button className=${`btn ${view === 'shared' ? 'btn-primary' : ''}`} onClick=${() => setView('shared')}>Shared with Me</button>
+              </div>
+              ${restResponse && html`
+                <div className="card" style=${{ marginTop: 16 }}>
+                  <div className="muted" style=${{ fontWeight: 600 }}>REST Response</div>
+                  <div className="muted">${restResponse}</div>
+                </div>
+              `}
+            </div>
+
+            <div className="content">
+              <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h2 className="section-title">${view === 'my-files' ? 'My Files' : 'Shared with Me'}</h2>
+                <div className="row">
+                  <button className="btn" onClick=${() => setViewMode('grid')}>Grid</button>
+                  <button className="btn" onClick=${() => setViewMode('list')}>List</button>
+                </div>
+              </div>
+
+              ${viewMode === 'grid' ? html`
+                <div className="grid">
+                  ${files.map(f => html`
+                    <div key=${f.id} className="file-card" onClick=${() => setSelectedFile(f)}>
+                      <div style=${{ fontSize: 28 }}>📄</div>
+                      <div style=${{ fontWeight: 600, marginTop: 6 }}>${f.name}</div>
+                      <div className="muted">${f.owner?.email}</div>
+                    </div>
+                  `)}
+                </div>
+              ` : html`
+                <div style=${{ display: 'grid', gap: 8 }}>
+                  ${files.map(f => html`
+                    <div key=${f.id} className="file-row" onClick=${() => setSelectedFile(f)}>
+                      <div style=${{ fontSize: 22 }}>📄</div>
+                      <div style=${{ flex: 1 }}>
+                        <div style=${{ fontWeight: 600 }}>${f.name}</div>
+                        <div className="muted">Owner: ${f.owner?.email}</div>
+                      </div>
+                      <div className="muted">${new Date(f.createdAt).toLocaleDateString()}</div>
+                    </div>
+                  `)}
+                </div>
+              `}
+            </div>
+          </div>
+
+          ${uploadOpen && html`<${FileUploadModal} onClose=${() => setUploadOpen(false)} onComplete=${() => { setUploadOpen(false); view === 'my-files' ? loadFiles() : loadShared(); }} />`}
+          ${selectedFile && html`<${FileDetailsPanel} file=${selectedFile} onClose=${() => setSelectedFile(null)} refetch=${view === 'my-files' ? loadFiles : loadShared} />`}
+        </div>
+      `;
+    };
+
+    const App = () => {
+      const { token } = useAuth();
+      return token ? html`<${Dashboard} />` : html`<${AuthScreen} />`;
+    };
+
+    const Root = () => html`
+      <${ToastProvider}>
+        <${AuthProvider}>
+          <${App} />
+        <//>
+      <//>
+    `;
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(html`<${Root} />`);
+  </script>
+</body>
+</html>

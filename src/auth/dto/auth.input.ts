@@ -4,32 +4,32 @@ import { User } from '../../user/user.model';
 @InputType()
 export class RegisterInput {
   @Field()
-  email: string;
+  email!: string;
 
   @Field()
-  password: string;
+  password!: string;
 
   @Field()
-  name: string;
+  name!: string;
 }
 
 @InputType()
 export class LoginInput {
   @Field()
-  email: string;
+  email!: string;
 
   @Field()
-  password: string;
+  password!: string;
 }
 
 @ObjectType()
 export class AuthPayload {
   @Field()
-  accessToken: string;
+  accessToken!: string;
 
   @Field()
-  refreshToken: string;
+  refreshToken!: string;
 
   @Field()
-  user: User;
+  user!: User;
 }

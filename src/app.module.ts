@@ -8,7 +8,7 @@ import { FilesModule } from './files/files.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MinioModule } from './minio/minio.module';
 import { PubSubModule } from './pubsub/pubsub.module';
-import { ThrottlerModule } from './throttler/throttler.module';
+import { AppThrottlerModule } from './throttler/throttler.module';
 import { KafkaModule } from './kafka/kafka.module';
 import { EventsModule } from './events/events.module';
 
@@ -31,7 +31,7 @@ import { EventsModule } from './events/events.module';
         }),
       }),
     }),
-    ThrottlerModule,
+    AppThrottlerModule,
     PubSubModule,
     PrismaModule,
     AuthModule,

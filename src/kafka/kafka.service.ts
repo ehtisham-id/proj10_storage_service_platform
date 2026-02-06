@@ -1,6 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientKafka } from '@nestjs/microservices';
-import { Observable } from 'rxjs';
 
 export interface FileEvent {
   type: 'FILE_UPLOADED' | 'FILE_UPDATED' | 'FILE_DELETED';
@@ -24,7 +23,7 @@ export class KafkaService {
     await this.client.emit(`file-events`, event).toPromise();
   }
 
-  async getFileEvents(): Promise<Observable<any>> {
-    return this.client.subscribeToResponseOf('file-events');
+  getFileEvents(): void {
+    this.client.subscribeToResponseOf('file-events');
   }
 }
