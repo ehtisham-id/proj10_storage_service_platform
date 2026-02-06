@@ -16,11 +16,20 @@ import { EventsModule } from './events/events.module';
   imports: [
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
+      imports: [PubSubModule],
       inject: [PubSub],
       useFactory: async (pubsub: PubSub) => ({
         autoSchemaFile: join(process.cwd(), 'schema.gql'),
         sortSchema: true,
         playground: true,
+        // Ensure Apollo's HTTP server responds with CORS headers for preflight requests
+        cors: {
+          origin: [
+            process.env.FRONTEND_URL || 'http://localhost:3000',
+            'http://localhost:5500',
+          ],
+          credentials: true,
+        },
         uploads: false,
         subscriptions: {
           'graphql-ws': true,

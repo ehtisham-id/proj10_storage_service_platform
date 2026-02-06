@@ -30,6 +30,7 @@ services:
       - postgres
       - minio
       - kafka
+    command: ["npm", "run", "start:prod"]
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/storage"
       MINIO_ENDPOINT: "minio"

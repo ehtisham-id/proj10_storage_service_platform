@@ -8,11 +8,28 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async enableShutdownHooks(app: INestApplication) {
-    const prisma = this as unknown as {
-      $on: (event: string, cb: () => Promise<void>) => void;
+    // Prisma v5's library engine no longer supports the $on('beforeExit') hook.
+    // Attach shutdown hooks to the process object instead so Nest can close gracefully.
+    const shutdown = async () => {
+      try {
+        await app.close();
+      } catch (e) {
+        // ignore errors during shutdown
+      }
     };
-    prisma.$on('beforeExit', async () => {
-      await app.close();
+
+    process.once('beforeExit', async () => {
+      await shutdown();
+    });
+
+    process.once('SIGINT', async () => {
+      await shutdown();
+      process.exit(0);
+    });
+
+    process.once('SIGTERM', async () => {
+      await shutdown();
+      process.exit(0);
     });
   }
 }
