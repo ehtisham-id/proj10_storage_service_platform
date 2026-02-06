@@ -1,14 +1,19 @@
-import { Resolver, Query, Mutation, Args, Context } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Subscription } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
+import { PubSub } from 'graphql-subscriptions';
+import { GraphQLUpload, FileUpload } from 'graphql-upload';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { FilesService } from './files.service';
-import { File } from './dto/file.input';
-import { CreateFileInput } from './dto/create-file.input';
+import { File, FileVersion, Permission } from './dto/file.input';
+import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
 
 @Resolver(() => File)
 export class FilesResolver {
-  constructor(private filesService: FilesService) {}
+  constructor(
+    private filesService: FilesService,
+    private pubsub: PubSub,
+  ) {}
 
   @Query(() => [File])
   @UseGuards(GqlAuthGuard)
@@ -34,11 +39,12 @@ export class FilesResolver {
   @Mutation(() => File)
   @UseGuards(GqlAuthGuard)
   async uploadFile(
-    @Args({ name: 'file', type: () => GraphQLUpload }) file: any,
+    @Args({ name: 'file', type: () => GraphQLUpload }) file: Promise<FileUpload>,
     @Args('fileName') fileName: string,
     @CurrentUser() user: any,
   ) {
-    return this.filesService.uploadFile(file, fileName, user.sub);
+    const upload = await file;
+    return this.filesService.uploadFile(upload, fileName, user.sub);
   }
 
   @Mutation(() => Boolean)
@@ -46,8 +52,6 @@ export class FilesResolver {
   async deleteFile(@Args('fileId') fileId: string, @CurrentUser() user: any) {
     return this.filesService.deleteFile(fileId, user.sub);
   }
-
-  // Add to existing FilesResolver class
 
   @Query(() => [File])
   @UseGuards(GqlAuthGuard)
@@ -84,29 +88,6 @@ export class FilesResolver {
   ) {
     return this.filesService.getDownloadUrl(fileVersionId, user.sub);
   }
-}
-
-
-import { 
-  Resolver, 
-  Query, 
-  Mutation, 
-  Args, 
-  Subscription,
-  WithFilteredType 
-} from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
-import { PubSub } from 'graphql-subscriptions';
-import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
-
-@Resolver(() => File)
-export class FilesResolver {
-  constructor(
-    private filesService: FilesService,
-    private pubsub: PubSub
-  ) {}
-
-  // Existing resolvers...
 
   @Subscription(() => File)
   @UseGuards(GqlAuthGuard)

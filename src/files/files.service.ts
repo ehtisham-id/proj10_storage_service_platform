@@ -3,9 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MinioService } from '../minio/minio.service';
 import { PubSub } from 'graphql-subscriptions';
 import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
-import { v2 as cloudinary } from 'cloudinary'; // For mime-type validation
-import * as fileType from 'magic-bytes.js';
-import { KafkaService } from '../kafka/kafka.service';
+import { fileType } from 'magic-bytes.js';
+import { FileEvent, KafkaService } from '../kafka/kafka.service';
+import { FileUpload } from 'graphql-upload';
+import { Readable } from 'stream';
 
 
 const ALLOWED_MIME_TYPES = [
@@ -80,8 +81,9 @@ export class FilesService {
     });
   }
 
-  async uploadFile(file: any, fileName: string, userId: string) {
-    this.validateFile(file);
+  async uploadFile(file: FileUpload, fileName: string, userId: string) {
+    const prepared = await this.prepareUpload(file);
+    this.validateFile(prepared);
     // Check if file with same name exists for this user
     const existingFile = await this.prisma.file.findFirst({
       where: { name: fileName, ownerId: userId },
@@ -104,9 +106,9 @@ export class FilesService {
 
     const filePath = `files/${userId}/${fileRecord.id}/v${versionNumber}-${Date.now()}-${fileName}`;
 
-    await this.minio.encryptAndUpload('storage', filePath, file.createReadStream(), {
-      'Content-Type': file.mimetype,
-      'Content-Length': file.size.toString(),
+    await this.minio.encryptAndUpload('storage', filePath, prepared.stream, {
+      'Content-Type': prepared.mimetype,
+      'Content-Length': prepared.size.toString(),
       'x-amz-meta-original-name': fileName
     });
 
@@ -117,8 +119,8 @@ export class FilesService {
         fileId: fileRecord.id,
         filePath,
         versionNumber,
-        size: BigInt(file.size),
-        mimeType: file.mimetype,
+        size: BigInt(prepared.size),
+        mimeType: prepared.mimetype,
       },
     });
 
@@ -132,7 +134,7 @@ export class FilesService {
       fileId: fileRecord.id,
       userId,
       timestamp: new Date().toISOString(),
-      metadata: { fileName, size: file.size }
+      metadata: { fileName, size: prepared.size }
     };
 
     await this.kafka.publishFileEvent(event);
@@ -252,7 +254,11 @@ export class FilesService {
       const oldPath = version.filePath;
       const newPath = oldPath.replace(/\/[^\/]+$/, `/${newName}`);
 
-      await this.minio.copyObject('storage', newPath, 'storage', oldPath, {});
+      await this.minio.copyObject(
+        'storage',
+        newPath,
+        `/storage/${oldPath}`,
+      );
       await this.minio.removeObject('storage', oldPath);
 
       await this.prisma.fileVersion.update({
@@ -290,7 +296,11 @@ export class FilesService {
     return this.minio.decryptDownload(version.filePath);
   }
   
-  private validateFile(file: any): void {
+  private validateFile(file: {
+    size: number;
+    mimetype: string;
+    buffer: Buffer;
+  }): void {
     // Size validation (10MB max)
     if (file.size > 10 * 1024 * 1024) {
       throw new BadRequestException('File too large. Max 10MB.');
@@ -301,12 +311,40 @@ export class FilesService {
       throw new BadRequestException('File type not allowed.');
     }
 
-    // Magic bytes validation (double-check)
-    const buffer = Buffer.alloc(4100);
-    file.buffer = buffer;
-    const detectedType = fileType(file.buffer, { length: 4100 });
-    if (!detectedType?.some(t => ALLOWED_MIME_TYPES.includes(t.mime))) {
+    const detectedType = fileType(file.buffer) || [];
+    const isDetectedAllowed = detectedType.some((t) =>
+      ALLOWED_MIME_TYPES.includes(t.mime),
+    );
+    const isTextLike =
+      file.mimetype.startsWith('text/') ||
+      file.mimetype === 'application/json' ||
+      file.mimetype === 'application/xml';
+
+    if (!isDetectedAllowed && !isTextLike) {
       throw new BadRequestException('Invalid file type detected.');
     }
+  }
+
+  private async prepareUpload(file: FileUpload) {
+    const stream = file.createReadStream();
+    const chunks: Buffer[] = [];
+    let total = 0;
+
+    for await (const chunk of stream) {
+      const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += bufferChunk.length;
+      if (total > 10 * 1024 * 1024) {
+        throw new BadRequestException('File too large. Max 10MB.');
+      }
+      chunks.push(bufferChunk);
+    }
+
+    const buffer = Buffer.concat(chunks);
+    return {
+      buffer,
+      size: buffer.length,
+      mimetype: file.mimetype,
+      stream: Readable.from(buffer),
+    };
   }
 }

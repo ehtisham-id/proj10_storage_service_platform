@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 
 @Module({
   imports: [

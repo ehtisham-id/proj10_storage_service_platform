@@ -11,7 +11,7 @@ import { KafkaService } from './kafka.service';
         options: {
           client: {
             clientId: 'storage-platform',
-            brokers: ['kafka:29092'],
+            brokers: [process.env.KAFKA_BROKERS || 'kafka:29092'],
           },
           producer: {
             allowAutoTopicCreation: true,

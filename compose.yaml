@@ -29,13 +29,16 @@ services:
     depends_on:
       - postgres
       - minio
+      - kafka
     environment:
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/storage"
-      MINIO_ENDPOINT: "minio:9000"
-      MINIO_ACCESS_KEY: "695c0023a6b2f2675a90cfa0e531dbdb91443976b2a904b35b91850f01636574"
-      MINIO_SECRET_KEY: "2c71ade6aba027111923d28a8f3e8275bbf450135926ae52ba8b674ac3e2acfb"
+      MINIO_ENDPOINT: "minio"
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: "minioadmin"
+      MINIO_SECRET_KEY: "minioadmin123"
       JWT_SECRET: "48acaa0f0242a3c4e6473a654fba886995abfbfb2963a7b7b018450102084c5e"
       FRONTEND_URL: "http://localhost:3000"
+      KAFKA_BROKERS: "kafka:29092"
   
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0

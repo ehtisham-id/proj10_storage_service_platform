@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
+import { PubSub } from 'graphql-subscriptions';
 import { AuthModule } from './auth/auth.module';
 import { FilesModule } from './files/files.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -10,19 +11,24 @@ import { PubSubModule } from './pubsub/pubsub.module';
 import { ThrottlerModule } from './throttler/throttler.module';
 import { KafkaModule } from './kafka/kafka.module';
 import { EventsModule } from './events/events.module';
-import { PrismaService } from './prisma/prisma.service';
-import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      useFactory: async () => ({
+      inject: [PubSub],
+      useFactory: async (pubsub: PubSub) => ({
         autoSchemaFile: join(process.cwd(), 'schema.gql'),
         sortSchema: true,
         playground: true,
-        installSubscriptionHandlers: true,
-        context: ({ req, pubsub }) => ({ req, pubsub }),
+        uploads: false,
+        subscriptions: {
+          'graphql-ws': true,
+        },
+        context: ({ req, extra }) => ({
+          req: req ?? extra?.request,
+          pubsub,
+        }),
       }),
     }),
     ThrottlerModule,
@@ -34,6 +40,6 @@ import { PrismaModule } from './prisma/prisma.module';
     KafkaModule,
     EventsModule,
   ],
-  providers: [PrismaService],
+  providers: [],
 })
 export class AppModule {}

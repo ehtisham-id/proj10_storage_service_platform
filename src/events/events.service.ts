@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
+import { EventPattern } from '@nestjs/microservices';
 import { ClientKafka } from '@nestjs/microservices';
 import { FileEvent } from '../kafka/kafka.service';
 

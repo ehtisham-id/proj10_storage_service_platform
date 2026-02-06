@@ -1,5 +1,5 @@
-import { Field, ObjectType, ID, Int } from '@nestjs/graphql';
-import { User } from '../user/user.model';
+import { Field, ObjectType, ID, Int, InputType } from '@nestjs/graphql';
+import { User } from '../../user/user.model';
 
 @ObjectType()
 export class FileVersion {
@@ -62,9 +62,13 @@ export class File {
 
   @Field()
   createdAt: Date;
+
+  @Field(() => String)
+  get latestDownloadUrl(): string {
+    return this.versions?.[0]?.filePath || '';
+  }
 }
 
-// Add to existing types
 @InputType()
 export class ShareFileInput {
   @Field()
@@ -75,31 +79,4 @@ export class ShareFileInput {
 
   @Field()
   role: 'owner' | 'editor' | 'viewer';
-}
-
-// Update File type to include download functionality
-@ObjectType()
-export class File {
-  @Field(() => ID)
-  id: string;
-
-  @Field()
-  name: string;
-
-  @Field(() => User)
-  owner: User;
-
-  @Field(() => [FileVersion])
-  versions: FileVersion[];
-
-  @Field(() => [Permission])
-  permissions: Permission[];
-
-  @Field()
-  createdAt: Date;
-
-  @Field(() => String) // Latest version download URL
-  get latestDownloadUrl(): string {
-    return this.versions[0]?.filePath || '';
-  }
 }
