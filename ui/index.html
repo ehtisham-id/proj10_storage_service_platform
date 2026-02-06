@@ -530,12 +530,39 @@
 
       const handleDownload = async (versionId) => {
         try {
-          const data = await fetchGraphQL({
-            query: `query GetDownloadUrl($fileVersionId: String!) { getDownloadUrl(fileVersionId: $fileVersionId) }`,
-            variables: { fileVersionId: versionId },
-            token,
+          // Fetch the file through backend with auth
+          const response = await fetch(`${REST_URL}/files/download/${versionId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
           });
-          window.open(data.getDownloadUrl, '_blank');
+
+          if (!response.ok) {
+            throw new Error('Download failed');
+          }
+
+          // Get filename from Content-Disposition header or use default
+          const contentDisposition = response.headers.get('Content-Disposition');
+          let filename = 'download';
+          if (contentDisposition) {
+            const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (match && match[1]) {
+              filename = decodeURIComponent(match[1].replace(/['"]/g, ''));
+            }
+          }
+
+          // Create blob and trigger download
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+
+          addToast('Download started', 'success');
         } catch (err) {
           addToast(err.message, 'error');
         }

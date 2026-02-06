@@ -33,8 +33,8 @@ export class Permission {
   @Field(() => ID)
   userId!: string;
 
-  @Field(() => User)
-  user!: User;
+  @Field(() => User, { nullable: true })
+  user?: User;
 
   @Field(() => ID)
   fileId!: string;

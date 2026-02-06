@@ -69,7 +69,9 @@ export class FilesService {
           orderBy: { versionNumber: 'desc' },
           take: 1, // Latest version only
         },
-        permissions: true,
+        permissions: {
+          include: { user: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -154,8 +156,11 @@ export class FilesService {
       },
     });
 
+    // Fetch complete file with all relations for subscription
+    const completeFile = await this.getFile(fileRecord.id, userId);
+
     await this.pubsub.publish(FILE_UPLOADED, {
-      fileUploaded: fileRecord,
+      fileUploaded: completeFile,
       userId,
     });
 
@@ -211,7 +216,7 @@ export class FilesService {
     targetUserIdOrEmail: string,
     role: 'owner' | 'editor' | 'viewer',
   ) {
-    const file = await this.getFile(fileId, userId); // Validates ownership
+    const file = await this.getFile(fileId, userId); // Validates access
 
     // Validate target user exists - try by ID first, then by email
     let targetUser = await this.prisma.user.findUnique({
@@ -225,6 +230,25 @@ export class FilesService {
     }
     if (!targetUser) {
       throw new NotFoundException('Target user not found');
+    }
+
+    // Prevent self-sharing
+    if (targetUser.id === userId) {
+      throw new BadRequestException('Cannot share file with yourself');
+    }
+
+    // Determine current user's permission level
+    const isOwner = file.owner.id === userId;
+    const userPermission = file.permissions?.find((p) => p.userId === userId);
+    const userRole = isOwner ? 'owner' : userPermission?.role;
+
+    // Validate sharing permissions
+    if (!userRole || userRole === 'viewer') {
+      throw new BadRequestException('Viewers cannot share files');
+    }
+
+    if (userRole === 'editor' && role !== 'viewer') {
+      throw new BadRequestException('Editors can only share as viewer');
     }
 
     // Check if permission already exists
@@ -286,7 +310,8 @@ export class FilesService {
     if (!version)
       throw new NotFoundException('Version not found or access denied');
 
-    return this.minio.generatePresignedUrl(version.filePath, 3600); // 1 hour
+    // Return backend download endpoint URL (files are encrypted, so we serve through backend)
+    return `/files/download/${fileVersionId}`;
   }
 
   async renameFile(fileId: string, newName: string, userId: string) {
@@ -315,17 +340,20 @@ export class FilesService {
       });
     }
 
+    await this.prisma.file.update({
+      where: { id: fileId },
+      data: { name: newName },
+    });
+
+    // Fetch complete file with all relations for subscription and return
+    const updatedFile = await this.getFile(fileId, userId);
+
     await this.pubsub.publish(FILE_UPDATED, {
-      fileUpdated: file,
+      fileUpdated: updatedFile,
       userId,
     });
 
-    const updated = await this.prisma.file.update({
-      where: { id: fileId },
-      data: { name: newName },
-      include: { versions: true },
-    });
-    return this.transformVersions(updated);
+    return updatedFile;
   }
 
   async getSecureDownloadStream(fileVersionId: string, userId: string) {

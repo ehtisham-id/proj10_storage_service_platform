@@ -63,7 +63,7 @@ async function bootstrap() {
       'x-apollo-operation-name',
       'x-requested-with',
     ],
-    exposedHeaders: ['x-apollo-operation-name'],
+    exposedHeaders: ['x-apollo-operation-name', 'Content-Disposition'],
   });
 
   await waitForKafka();

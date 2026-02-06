@@ -6,7 +6,6 @@ import { PassThrough, Readable } from 'stream';
 @Injectable()
 export class MinioService extends Minio.Client implements OnModuleInit {
   private encryptionKey: Buffer;
-  private publicClient: Minio.Client;
 
   constructor() {
     const { endPoint, port, useSSL } = MinioService.parseEndpoint(
@@ -18,19 +17,6 @@ export class MinioService extends Minio.Client implements OnModuleInit {
       endPoint,
       port,
       useSSL,
-      accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-      secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
-    });
-
-    // Public client for generating presigned URLs with the correct host
-    const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT || 'localhost';
-    const publicPort = Number(
-      process.env.MINIO_PUBLIC_PORT || process.env.MINIO_PORT || 9000,
-    );
-    this.publicClient = new Minio.Client({
-      endPoint: publicEndpoint,
-      port: publicPort,
-      useSSL: false,
       accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
       secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
     });
@@ -75,11 +61,6 @@ export class MinioService extends Minio.Client implements OnModuleInit {
     );
 
     return encryptedStream.pipe(decipher);
-  }
-
-  async generatePresignedUrl(filePath: string, expires: number = 3600) {
-    // Use public client to generate URL with correct host signature
-    return this.publicClient.presignedGetObject('storage', filePath, expires);
   }
 
   private static parseEndpoint(raw: string, fallbackPort: number) {
