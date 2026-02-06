@@ -1,4 +1,4 @@
-declare module 'graphql-upload' {
+declare module 'graphql-upload-minimal' {
   import { Readable } from 'stream';
 
   export interface FileUpload {

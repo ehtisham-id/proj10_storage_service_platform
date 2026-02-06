@@ -1,6 +1,6 @@
 import { Field, InputType } from '@nestjs/graphql';
 import { IsString, IsNotEmpty, MaxLength, Matches } from 'class-validator';
-import { FileUpload, GraphQLUpload } from 'graphql-upload';
+import { FileUpload, GraphQLUpload } from 'graphql-upload-minimal';
 
 @InputType()
 export class UploadFileInput {

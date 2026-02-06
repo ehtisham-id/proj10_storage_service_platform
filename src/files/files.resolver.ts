@@ -1,7 +1,7 @@
 import { Resolver, Query, Mutation, Args, Subscription } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { PubSub } from 'graphql-subscriptions';
-import { GraphQLUpload, FileUpload } from 'graphql-upload';
+import { GraphQLUpload, FileUpload } from 'graphql-upload-minimal';
 import { GqlAuthGuard } from '../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { FilesService } from './files.service';

@@ -6,7 +6,7 @@ import { FILE_UPLOADED, FILE_UPDATED, FILE_DELETED } from './files.constants';
 import fileType from 'magic-bytes.js';
 import * as Minio from 'minio';
 import { FileEvent, KafkaService } from '../kafka/kafka.service';
-import { FileUpload } from 'graphql-upload';
+import { FileUpload } from 'graphql-upload-minimal';
 import { Readable } from 'stream';
 
 

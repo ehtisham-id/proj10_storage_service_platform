@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { Transport } from '@nestjs/microservices';
-import { graphqlUploadExpress } from 'graphql-upload';
+import { graphqlUploadExpress } from 'graphql-upload-minimal';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 
